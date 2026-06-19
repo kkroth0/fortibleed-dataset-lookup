@@ -1,20 +1,20 @@
 #!/usr/bin/env python3
-"""Cruza uma lista de domínios e/ou IPs contra os datasets públicos do FortiBleed.
+"""Cross-check a list of domains and/or IPs against the public FortiBleed datasets.
 
-Datasets (uma entrada por linha):
+Datasets (one entry per line):
     https://github.com/kkroth0/fortibleed-dataset-lookup
-    - fortibleed-public-dataset.txt   (domínios)
+    - fortibleed-public-dataset.txt   (domains)
     - fortibleed-ips.txt              (IPs)
 
-Uso:
-    python3 fortibleed_lookup.py meus_alvos.txt
-    python3 fortibleed_lookup.py meus_alvos.txt --subdomains
-    python3 fortibleed_lookup.py meus_alvos.txt --json resultado.json
-    python3 fortibleed_lookup.py meus_alvos.txt --domains dom.txt --ips ips.txt
+Usage:
+    python3 fortibleed_lookup.py my_targets.txt
+    python3 fortibleed_lookup.py my_targets.txt --subdomains
+    python3 fortibleed_lookup.py my_targets.txt --json result.json
+    python3 fortibleed_lookup.py my_targets.txt --domains-db dom.txt --ips-db ips.txt
 
-Cada linha da entrada é classificada como IP ou domínio e comparada contra o
-dataset correspondente. Saída: as entradas que aparecem (HIT) nos datasets.
-Código de saída 1 se houve pelo menos um HIT, 0 caso contrário (útil em pipelines).
+Each input line is classified as an IP or a domain and compared against the
+matching dataset. Output: the entries that show up (HIT) in the datasets.
+Exit code 1 if there was at least one HIT, 0 otherwise (handy in pipelines).
 """
 
 from __future__ import annotations
@@ -27,7 +27,7 @@ import sys
 
 
 def normalize_domain(raw: str) -> str:
-    """Reduz uma linha a um domínio comparável (minúsculo, sem esquema/porta/www/path)."""
+    """Reduce a line to a comparable domain (lowercase, no scheme/port/www/path)."""
     d = raw.strip().lstrip("﻿").strip()
     if not d or d.startswith("#"):
         return ""
@@ -47,13 +47,13 @@ def normalize_domain(raw: str) -> str:
 
 
 def normalize_ip(raw: str) -> str | None:
-    """Retorna o IP canônico se a linha for um IP válido (com ou sem porta), senão None."""
+    """Return the canonical IP if the line is a valid IP (with or without port), else None."""
     s = raw.strip().lstrip("﻿").strip()
     if not s or s.startswith("#"):
         return None
     if "://" in s:
         s = s.split("://", 1)[1]
-    # remove porta de IPv4 (1.2.3.4:443) — não mexe em IPv6 cru
+    # strip port from IPv4 (1.2.3.4:443) — leave raw IPv6 untouched
     if s.count(":") == 1 and "." in s:
         s = s.split(":", 1)[0]
     try:
@@ -83,7 +83,7 @@ def load_domains(path: str) -> set[str]:
 
 
 def classify_input(path: str) -> tuple[set[str], set[str], int]:
-    """Lê a entrada e separa em (ips, domínios, linhas_lidas)."""
+    """Read the input and split into (ips, domains, lines_read)."""
     ips: set[str] = set()
     domains: set[str] = set()
     lines = 0
@@ -101,7 +101,7 @@ def classify_input(path: str) -> tuple[set[str], set[str], int]:
 
 
 def parent_domains(domain: str):
-    """Gera os domínios-pai: a.b.c.com -> b.c.com -> c.com."""
+    """Yield the parent domains: a.b.c.com -> b.c.com -> c.com."""
     parts = domain.split(".")
     for i in range(len(parts) - 1):
         yield ".".join(parts[i:])
@@ -121,32 +121,32 @@ def find_default(name: str) -> str | None:
 
 def main() -> int:
     ap = argparse.ArgumentParser(
-        description="Cruza a SUA lista de domínios/IPs contra os datasets FortiBleed.",
+        description="Cross-check YOUR list of domains/IPs against the FortiBleed datasets.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "exemplos:\n"
-            "  python3 fortibleed_lookup.py alvos-exemplo.txt\n"
-            "  python3 fortibleed_lookup.py meus_alvos.txt --subdomains\n"
-            "  python3 fortibleed_lookup.py meus_alvos.txt -q --json saida.json\n\n"
-            "o ARQUIVO posicional é a SUA lista (um domínio ou IP por linha).\n"
-            "os datasets do FortiBleed são detectados automaticamente ao lado do\n"
-            "script; só use --domains-db / --ips-db se eles estiverem em outro lugar."
+            "examples:\n"
+            "  python3 fortibleed_lookup.py example-targets.txt\n"
+            "  python3 fortibleed_lookup.py my_targets.txt --subdomains\n"
+            "  python3 fortibleed_lookup.py my_targets.txt -q --json out.json\n\n"
+            "the positional FILE is YOUR list (one domain or IP per line).\n"
+            "the FortiBleed datasets are auto-detected next to the script; only\n"
+            "use --domains-db / --ips-db if they live somewhere else."
         ),
     )
-    ap.add_argument("input", metavar="ARQUIVO",
-                    help="Sua lista de domínios e/ou IPs a verificar (um por linha).")
+    ap.add_argument("input", metavar="FILE",
+                    help="Your list of domains and/or IPs to check (one per line).")
     ap.add_argument("--domains-db", dest="domains_db", default=None, metavar="PATH",
-                    help="Caminho do dataset de domínios (default: fortibleed-public-dataset.txt ao lado do script).")
+                    help="Path to the domain dataset (default: fortibleed-public-dataset.txt next to the script).")
     ap.add_argument("--ips-db", dest="ips_db", default=None, metavar="PATH",
-                    help="Caminho do dataset de IPs (default: fortibleed-ips.txt ao lado do script).")
+                    help="Path to the IP dataset (default: fortibleed-ips.txt next to the script).")
     ap.add_argument("--subdomains", action="store_true",
-                    help="Conta HIT se um domínio-pai estiver no dataset (vpn.acme.com casa acme.com).")
-    ap.add_argument("--json", metavar="ARQUIVO", help="Grava o resultado completo em JSON.")
-    ap.add_argument("-q", "--quiet", action="store_true", help="Mostra só os HITs.")
+                    help="Count a HIT if a parent domain is in the dataset (vpn.acme.com matches acme.com).")
+    ap.add_argument("--json", metavar="FILE", help="Write the full result to JSON.")
+    ap.add_argument("-q", "--quiet", action="store_true", help="Show only the HITs.")
     args = ap.parse_args()
 
     if not os.path.isfile(args.input):
-        print(f"ERRO: arquivo de entrada não encontrado: {args.input}", file=sys.stderr)
+        print(f"ERROR: input file not found: {args.input}", file=sys.stderr)
         return 2
 
     in_ips, in_domains, in_lines = classify_input(args.input)
@@ -157,8 +157,8 @@ def main() -> int:
     domain_dataset = load_domains(domain_dataset_path) if domain_dataset_path else set()
     ip_dataset = load_ips(ip_dataset_path) if ip_dataset_path else set()
 
-    # cruzamento de domínios
-    dom_hits = []   # (consultado, casou)
+    # domain cross-check
+    dom_hits = []   # (queried, matched)
     for d in sorted(in_domains):
         if d in domain_dataset:
             dom_hits.append((d, d))
@@ -167,34 +167,34 @@ def main() -> int:
             if matched:
                 dom_hits.append((d, matched))
 
-    # cruzamento de IPs
+    # IP cross-check
     ip_hits = sorted(ip for ip in in_ips if ip in ip_dataset)
 
     if not args.quiet:
-        print(f"Dataset domínios: {domain_dataset_path or '(ausente)'}  ({len(domain_dataset)} únicos)")
-        print(f"Dataset IPs:      {ip_dataset_path or '(ausente)'}  ({len(ip_dataset)} únicos)")
-        print(f"Entrada:          {args.input}  ({len(in_domains)} domínios + {len(in_ips)} IPs / {in_lines} linhas)")
-        print(f"Modo subdomínio:  {'on' if args.subdomains else 'off'}")
+        print(f"Domain dataset: {domain_dataset_path or '(missing)'}  ({len(domain_dataset)} unique)")
+        print(f"IP dataset:     {ip_dataset_path or '(missing)'}  ({len(ip_dataset)} unique)")
+        print(f"Input:          {args.input}  ({len(in_domains)} domains + {len(in_ips)} IPs / {in_lines} lines)")
+        print(f"Subdomain mode: {'on' if args.subdomains else 'off'}")
         print("-" * 64)
 
     total_hits = len(dom_hits) + len(ip_hits)
 
     if dom_hits:
-        print(f"[!] {len(dom_hits)} domínio(s) no dataset:")
+        print(f"[!] {len(dom_hits)} domain(s) in dataset:")
         for queried, matched in dom_hits:
             print(f"    {queried}" if queried == matched else f"    {queried}  (via {matched})")
     if ip_hits:
-        print(f"[!] {len(ip_hits)} IP(s) no dataset:")
+        print(f"[!] {len(ip_hits)} IP(s) in dataset:")
         for ip in ip_hits:
             print(f"    {ip}")
     if total_hits == 0:
-        print("[ok] Nenhuma entrada está nos datasets.")
+        print("[ok] No entry is in the datasets.")
 
     if not args.quiet:
         miss_dom = len(in_domains) - len(dom_hits)
         miss_ip = len(in_ips) - len(ip_hits)
         if miss_dom or miss_ip:
-            print(f"\n[-] Sem correspondência: {miss_dom} domínio(s), {miss_ip} IP(s).")
+            print(f"\n[-] No match: {miss_dom} domain(s), {miss_ip} IP(s).")
 
     if args.json:
         payload = {
@@ -212,7 +212,7 @@ def main() -> int:
         with open(args.json, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2, ensure_ascii=False)
         if not args.quiet:
-            print(f"\nJSON gravado em {args.json}")
+            print(f"\nJSON written to {args.json}")
 
     return 1 if total_hits else 0
 

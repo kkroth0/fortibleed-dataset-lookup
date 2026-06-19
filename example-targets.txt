@@ -1,8 +1,8 @@
-# exemplo: dominios e IPs misturados (uns batem, outros nao)
+# example: mixed domains and IPs (some hit, some do not)
 012.net
 https://www.10ti.com.br/login
 vpn.012.net
 1.0.87.176
 1.0.128.10:443
 8.8.8.8
-nao-existe-xyz.com
+does-not-exist-xyz.com

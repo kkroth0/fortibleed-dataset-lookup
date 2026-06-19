@@ -1,81 +1,81 @@
 # fortibleed-dataset-lookup
 
-Listas públicas de domínios e IPs associados ao **FortiBleed** + um script para cruzar a sua própria lista (domínios e/ou IPs) contra os datasets e descobrir se algum aparece.
+Public lists of domains and IPs associated with **FortiBleed** + a script to cross-check your own list (domains and/or IPs) against the datasets and find out if any of them show up.
 
-## Origem dos dados
+## Data origin
 
-Os dados foram localizados no Mastodon, pela hashtag [#FortiBleed](https://mastodon.social/tags/FortiBleed), a partir das seguintes fontes:
+The data was found on Mastodon, via the [#FortiBleed](https://mastodon.social/tags/FortiBleed) hashtag, from the following sources:
 
 - https://blog.gayint.org/fortibleed.html
 - http://owned.lab6.com/~gossi/research/public/fortibleed/some-fortibleed-ips.txt
 
-As listas foram conferidas contra outras ferramentas de lookup públicas para validação:
+The lists were cross-checked against other public lookup tools for validation:
 
 - [Hudson Rock](https://www.hudsonrock.com/fortinet)
 - [SOCRadar](https://socradar.io/free-tools/fortibleed)
 - [Quimerax](https://tools.quimerax.com/fortibleed)
 
-> ⚠️ **Uso defensivo.** Este repositório existe para ajudar times de segurança a verificar **exposição própria** (seus domínios / IPs / clientes). Não use para mirar terceiros.
+> ⚠️ **Defensive use.** This repository exists to help security teams check their **own exposure** (your domains / IPs / clients). Do not use it to target third parties.
 
-## Conteúdo
+## Contents
 
-| Arquivo | Descrição |
+| File | Description |
 | --- | --- |
-| `fortibleed-public-dataset.txt` | Dataset de domínios — um por linha (~21,8k entradas). |
-| `fortibleed-ips.txt` | Dataset de IPs — um por linha (~68,7k entradas). |
-| `fortibleed_lookup.py` | Script de cruzamento. Python 3, sem dependências externas. |
+| `fortibleed-public-dataset.txt` | Domain dataset — one per line (~21.8k entries). |
+| `fortibleed-ips.txt` | IP dataset — one per line (~68.7k entries). |
+| `fortibleed_lookup.py` | Cross-checking script. Python 3, no external dependencies. |
 
-## Uso
+## Usage
 
 ```bash
-# básico: lista quais dos SEUS domínios/IPs estão nos datasets
-python3 fortibleed_lookup.py meus_alvos.txt
+# basic: list which of YOUR domains/IPs are in the datasets
+python3 fortibleed_lookup.py my_targets.txt
 
-# também conta subdomínios (ex.: vpn.acme.com casa com acme.com)
-python3 fortibleed_lookup.py meus_alvos.txt --subdomains
+# also count subdomains (e.g. vpn.acme.com matches acme.com)
+python3 fortibleed_lookup.py my_targets.txt --subdomains
 
-# só os HITs, e grava o resultado em JSON
-python3 fortibleed_lookup.py meus_alvos.txt -q --json resultado.json
+# only the HITs, and write the result to JSON
+python3 fortibleed_lookup.py my_targets.txt -q --json result.json
 
-# apontar os datasets do FortiBleed em outro caminho (normalmente não precisa)
-python3 fortibleed_lookup.py meus_alvos.txt --domains-db dom.txt --ips-db ips.txt
+# point to the FortiBleed datasets at another path (usually not needed)
+python3 fortibleed_lookup.py my_targets.txt --domains-db dom.txt --ips-db ips.txt
 ```
 
-`meus_alvos.txt` é a **sua** lista — o argumento posicional, sem flag. As flags
-`--domains-db` / `--ips-db` só servem pra apontar os datasets do FortiBleed
-quando eles não estão ao lado do script (são detectados automaticamente).
+`my_targets.txt` is **your** list — the positional argument, no flag. The
+`--domains-db` / `--ips-db` flags only point to the FortiBleed datasets when
+they are not next to the script (they are auto-detected otherwise).
 
-A entrada é uma entrada por linha, misturando domínios e IPs livremente. Cada
-linha é classificada automaticamente como IP ou domínio e comparada contra o
-dataset correspondente. Linhas em branco e começadas com `#` são ignoradas.
+The input is one entry per line, mixing domains and IPs freely. Each line is
+automatically classified as an IP or a domain and compared against the matching
+dataset. Blank lines and lines starting with `#` are ignored.
 
-### Saída
+### Output
 
-- Imprime os domínios e IPs da sua lista que **deram HIT** nos datasets.
-- Em modo `--subdomains`, mostra também via qual domínio-pai casou (`vpn.012.net (via 012.net)`).
-- **Exit code** `1` quando há pelo menos um HIT, `0` quando a lista está limpa — encadeável em pipelines de CI/scripts.
+- Prints the domains and IPs from your list that **HIT** in the datasets.
+- In `--subdomains` mode, it also shows which parent domain matched (`vpn.012.net (via 012.net)`).
+- **Exit code** `1` when there is at least one HIT, `0` when the list is clean — chainable in CI/script pipelines.
 
-## Como o cruzamento funciona
+## How matching works
 
-Domínios e IPs são normalizados dos dois lados antes de comparar.
+Domains and IPs are normalized on both sides before comparing.
 
-Domínios:
+Domains:
 
-- remove BOM, espaços e linhas de comentário (`#`);
-- remove esquema (`http://`, `https://`), credenciais (`user@`), caminho, query e porta;
-- remove `www.` e o ponto final, e baixa tudo para minúsculo.
+- strip BOM, whitespace and comment lines (`#`);
+- strip scheme (`http://`, `https://`), credentials (`user@`), path, query and port;
+- strip `www.` and the trailing dot, and lowercase everything.
 
-Então `https://www.10ti.com.br/login` casa com a entrada `10ti.com.br`.
+So `https://www.10ti.com.br/login` matches the entry `10ti.com.br`.
 
 IPs:
 
-- valida via `ipaddress` (IPv4/IPv6) e canoniza;
-- aceita IP com porta (`1.0.128.10:443` casa com `1.0.128.10`).
+- validated via `ipaddress` (IPv4/IPv6) and canonicalized;
+- accepts IP with port (`1.0.128.10:443` matches `1.0.128.10`).
 
-## Requisitos
+## Requirements
 
-Python 3.7+. Nenhuma dependência além da biblioteca padrão.
+Python 3.7+. No dependencies beyond the standard library.
 
-## Aviso legal
+## Disclaimer
 
-Os datasets são fornecidos apenas para fins de pesquisa e defesa de segurança. O autor não se responsabiliza por uso indevido.
+The datasets are provided for security research and defense purposes only. The author is not responsible for misuse.
