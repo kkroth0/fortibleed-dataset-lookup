@@ -2,7 +2,18 @@
 
 Listas públicas de domínios e IPs associados ao **FortiBleed** + um script para cruzar a sua própria lista (domínios e/ou IPs) contra os datasets e descobrir se algum aparece.
 
-Os dados foram encontrados em https://blog.gayint.org/fortibleed.html e conferidos contra outras ferramentas de lookup públicas (Hudson Rock, SOCRadar, Quimerax).
+## Origem dos dados
+
+Os dados foram localizados no Mastodon, pela hashtag [#FortiBleed](https://mastodon.social/tags/FortiBleed), a partir das seguintes fontes:
+
+- https://blog.gayint.org/fortibleed.html
+- http://owned.lab6.com/~gossi/research/public/fortibleed/some-fortibleed-ips.txt
+
+As listas foram conferidas contra outras ferramentas de lookup públicas para validação:
+
+- [Hudson Rock](https://www.hudsonrock.com/fortinet)
+- [SOCRadar](https://socradar.io/free-tools/fortibleed)
+- [Quimerax](https://tools.quimerax.com/fortibleed)
 
 > ⚠️ **Uso defensivo.** Este repositório existe para ajudar times de segurança a verificar **exposição própria** (seus domínios / IPs / clientes). Não use para mirar terceiros.
 
