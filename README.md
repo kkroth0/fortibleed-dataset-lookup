@@ -1,43 +1,50 @@
 # fortibleed-dataset-lookup
 
-Lista pública de domínios associados ao **FortiBleed** + um script para cruzar a sua própria lista de domínios contra o dataset e descobrir se algum deles aparece.
+Listas públicas de domínios e IPs associados ao **FortiBleed** + um script para cruzar a sua própria lista (domínios e/ou IPs) contra os datasets e descobrir se algum aparece.
 
-> ⚠️ **Uso defensivo.** Este repositório existe para ajudar times de segurança a verificar **exposição própria** (seus domínios / clientes). Não use para mirar terceiros.
+Os dados foram encontrados em https://blog.gayint.org/fortibleed.html e conferidos contra outras ferramentas de lookup públicas (Hudson Rock, SOCRadar, Quimerax).
+
+> ⚠️ **Uso defensivo.** Este repositório existe para ajudar times de segurança a verificar **exposição própria** (seus domínios / IPs / clientes). Não use para mirar terceiros.
 
 ## Conteúdo
 
 | Arquivo | Descrição |
 | --- | --- |
-| `fortibleed-public-dataset.txt` | Dataset público — um domínio por linha (~21,8k entradas). |
+| `fortibleed-public-dataset.txt` | Dataset de domínios — um por linha (~21,8k entradas). |
+| `fortibleed-ips.txt` | Dataset de IPs — um por linha (~68,7k entradas). |
 | `fortibleed_lookup.py` | Script de cruzamento. Python 3, sem dependências externas. |
 
 ## Uso
 
 ```bash
-# básico: lista quais dos SEUS domínios estão no dataset
-python3 fortibleed_lookup.py meus_dominios.txt
+# básico: lista quais dos SEUS domínios/IPs estão nos datasets
+python3 fortibleed_lookup.py meus_alvos.txt
 
 # também conta subdomínios (ex.: vpn.acme.com casa com acme.com)
-python3 fortibleed_lookup.py meus_dominios.txt --subdomains
+python3 fortibleed_lookup.py meus_alvos.txt --subdomains
 
 # só os HITs, e grava o resultado em JSON
-python3 fortibleed_lookup.py meus_dominios.txt -q --json resultado.json
+python3 fortibleed_lookup.py meus_alvos.txt -q --json resultado.json
 
-# apontar para um dataset em outro caminho
-python3 fortibleed_lookup.py meus_dominios.txt --dataset /caminho/dataset.txt
+# apontar datasets em outro caminho
+python3 fortibleed_lookup.py meus_alvos.txt --domains dom.txt --ips ips.txt
 ```
 
-O arquivo de entrada é um domínio por linha. Linhas em branco e começadas com `#` são ignoradas.
+A entrada é uma entrada por linha, misturando domínios e IPs livremente. Cada
+linha é classificada automaticamente como IP ou domínio e comparada contra o
+dataset correspondente. Linhas em branco e começadas com `#` são ignoradas.
 
 ### Saída
 
-- Imprime os domínios da sua lista que **deram HIT** no dataset.
+- Imprime os domínios e IPs da sua lista que **deram HIT** nos datasets.
 - Em modo `--subdomains`, mostra também via qual domínio-pai casou (`vpn.012.net (via 012.net)`).
 - **Exit code** `1` quando há pelo menos um HIT, `0` quando a lista está limpa — encadeável em pipelines de CI/scripts.
 
 ## Como o casamento funciona
 
-Os domínios são normalizados dos dois lados antes de comparar:
+Domínios e IPs são normalizados dos dois lados antes de comparar.
+
+Domínios:
 
 - remove BOM, espaços e linhas de comentário (`#`);
 - remove esquema (`http://`, `https://`), credenciais (`user@`), caminho, query e porta;
@@ -45,10 +52,15 @@ Os domínios são normalizados dos dois lados antes de comparar:
 
 Então `https://www.10ti.com.br/login` casa com a entrada `10ti.com.br`.
 
+IPs:
+
+- valida via `ipaddress` (IPv4/IPv6) e canoniza;
+- aceita IP com porta (`1.0.128.10:443` casa com `1.0.128.10`).
+
 ## Requisitos
 
 Python 3.7+. Nenhuma dependência além da biblioteca padrão.
 
 ## Aviso legal
 
-O dataset é fornecido apenas para fins de pesquisa e defesa de segurança. O autor não se responsabiliza por uso indevido.
+Os datasets são fornecidos apenas para fins de pesquisa e defesa de segurança. O autor não se responsabiliza por uso indevido.

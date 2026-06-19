@@ -1,47 +1,43 @@
 #!/usr/bin/env python3
-"""Cruza uma lista de domínios contra o dataset público do FortiBleed.
+"""Cruza uma lista de domínios e/ou IPs contra os datasets públicos do FortiBleed.
 
-Dataset (uma entrada por linha):
+Datasets (uma entrada por linha):
     https://github.com/kkroth0/fortibleed-dataset-lookup
+    - fortibleed-public-dataset.txt   (domínios)
+    - fortibleed-ips.txt              (IPs)
 
 Uso:
-    python3 fortibleed_lookup.py meus_dominios.txt
-    python3 fortibleed_lookup.py meus_dominios.txt --dataset fortibleed-public-dataset.txt
-    python3 fortibleed_lookup.py meus_dominios.txt --subdomains   # casa subdomínios também
-    python3 fortibleed_lookup.py meus_dominios.txt --json resultado.json
+    python3 fortibleed_lookup.py meus_alvos.txt
+    python3 fortibleed_lookup.py meus_alvos.txt --subdomains
+    python3 fortibleed_lookup.py meus_alvos.txt --json resultado.json
+    python3 fortibleed_lookup.py meus_alvos.txt --domains dom.txt --ips ips.txt
 
-Saída: lista os domínios do SEU arquivo que aparecem (HIT) no dataset.
+Cada linha da entrada é classificada como IP ou domínio e comparada contra o
+dataset correspondente. Saída: as entradas que aparecem (HIT) nos datasets.
 Código de saída 1 se houve pelo menos um HIT, 0 caso contrário (útil em pipelines).
 """
 
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import json
 import os
 import sys
 
 
-def normalize(raw: str) -> str:
-    """Reduz uma linha a um domínio comparável.
-
-    Remove BOM, espaços, esquema (http://), usuário, porta, caminho, 'www.',
-    ponto final e deixa tudo minúsculo.
-    """
+def normalize_domain(raw: str) -> str:
+    """Reduz uma linha a um domínio comparável (minúsculo, sem esquema/porta/www/path)."""
     d = raw.strip().lstrip("﻿").strip()
     if not d or d.startswith("#"):
         return ""
-    # remove esquema
     if "://" in d:
         d = d.split("://", 1)[1]
-    # remove credenciais user@host
     if "@" in d:
         d = d.rsplit("@", 1)[1]
-    # remove caminho / query
     for sep in ("/", "?", "#"):
         if sep in d:
             d = d.split(sep, 1)[0]
-    # remove porta
     if ":" in d:
         d = d.split(":", 1)[0]
     d = d.strip().rstrip(".").lower()
@@ -50,17 +46,58 @@ def normalize(raw: str) -> str:
     return d
 
 
-def load_domains(path: str) -> tuple[set[str], int]:
-    """Carrega e normaliza domínios de um arquivo. Retorna (conjunto, linhas_lidas)."""
+def normalize_ip(raw: str) -> str | None:
+    """Retorna o IP canônico se a linha for um IP válido (com ou sem porta), senão None."""
+    s = raw.strip().lstrip("﻿").strip()
+    if not s or s.startswith("#"):
+        return None
+    if "://" in s:
+        s = s.split("://", 1)[1]
+    # remove porta de IPv4 (1.2.3.4:443) — não mexe em IPv6 cru
+    if s.count(":") == 1 and "." in s:
+        s = s.split(":", 1)[0]
+    try:
+        return str(ipaddress.ip_address(s))
+    except ValueError:
+        return None
+
+
+def load_ips(path: str) -> set[str]:
+    ips: set[str] = set()
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            n = normalize_ip(line)
+            if n:
+                ips.add(n)
+    return ips
+
+
+def load_domains(path: str) -> set[str]:
+    domains: set[str] = set()
+    with open(path, "r", encoding="utf-8", errors="replace") as fh:
+        for line in fh:
+            n = normalize_domain(line)
+            if n:
+                domains.add(n)
+    return domains
+
+
+def classify_input(path: str) -> tuple[set[str], set[str], int]:
+    """Lê a entrada e separa em (ips, domínios, linhas_lidas)."""
+    ips: set[str] = set()
     domains: set[str] = set()
     lines = 0
     with open(path, "r", encoding="utf-8", errors="replace") as fh:
         for line in fh:
             lines += 1
-            n = normalize(line)
-            if n:
-                domains.add(n)
-    return domains, lines
+            ip = normalize_ip(line)
+            if ip:
+                ips.add(ip)
+                continue
+            dom = normalize_domain(line)
+            if dom:
+                domains.add(dom)
+    return ips, domains, lines
 
 
 def parent_domains(domain: str):
@@ -70,9 +107,7 @@ def parent_domains(domain: str):
         yield ".".join(parts[i:])
 
 
-def find_default_dataset() -> str:
-    """Procura o dataset ao lado do script ou no diretório atual."""
-    name = "fortibleed-public-dataset.txt"
+def find_default(name: str) -> str | None:
     candidates = [
         os.path.join(os.path.dirname(os.path.abspath(__file__)), name),
         os.path.join(os.getcwd(), name),
@@ -81,85 +116,90 @@ def find_default_dataset() -> str:
     for c in candidates:
         if os.path.isfile(c):
             return c
-    return candidates[0]
+    return None
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Cruza domínios com o dataset FortiBleed.")
-    ap.add_argument("input", help="Arquivo com os domínios a verificar (um por linha).")
-    ap.add_argument(
-        "--dataset",
-        default=None,
-        help="Caminho do dataset FortiBleed (default: procura fortibleed-public-dataset.txt).",
-    )
-    ap.add_argument(
-        "--subdomains",
-        action="store_true",
-        help="Conta como HIT se um domínio-pai estiver no dataset (ex.: vpn.acme.com casa acme.com).",
-    )
+    ap = argparse.ArgumentParser(description="Cruza domínios/IPs com os datasets FortiBleed.")
+    ap.add_argument("input", help="Arquivo com domínios e/ou IPs a verificar (um por linha).")
+    ap.add_argument("--domains", default=None, help="Dataset de domínios (default: fortibleed-public-dataset.txt).")
+    ap.add_argument("--ips", default=None, help="Dataset de IPs (default: fortibleed-ips.txt).")
+    ap.add_argument("--subdomains", action="store_true",
+                    help="Conta HIT se um domínio-pai estiver no dataset (vpn.acme.com casa acme.com).")
     ap.add_argument("--json", metavar="ARQUIVO", help="Grava o resultado completo em JSON.")
-    ap.add_argument("-q", "--quiet", action="store_true", help="Mostra só os domínios que deram HIT.")
+    ap.add_argument("-q", "--quiet", action="store_true", help="Mostra só os HITs.")
     args = ap.parse_args()
 
-    dataset_path = args.dataset or find_default_dataset()
+    if not os.path.isfile(args.input):
+        print(f"ERRO: arquivo de entrada não encontrado: {args.input}", file=sys.stderr)
+        return 2
 
-    for label, path in (("dataset", dataset_path), ("entrada", args.input)):
-        if not os.path.isfile(path):
-            print(f"ERRO: arquivo de {label} não encontrado: {path}", file=sys.stderr)
-            return 2
+    in_ips, in_domains, in_lines = classify_input(args.input)
 
-    dataset, _ = load_domains(dataset_path)
-    targets, target_lines = load_domains(args.input)
+    domain_dataset_path = args.domains or find_default("fortibleed-public-dataset.txt")
+    ip_dataset_path = args.ips or find_default("fortibleed-ips.txt")
 
-    hits = []   # (dominio_consultado, dominio_que_casou)
-    misses = []
-    for d in sorted(targets):
-        if d in dataset:
-            hits.append((d, d))
+    domain_dataset = load_domains(domain_dataset_path) if domain_dataset_path else set()
+    ip_dataset = load_ips(ip_dataset_path) if ip_dataset_path else set()
+
+    # cruzamento de domínios
+    dom_hits = []   # (consultado, casou)
+    for d in sorted(in_domains):
+        if d in domain_dataset:
+            dom_hits.append((d, d))
         elif args.subdomains:
-            matched = next((p for p in parent_domains(d) if p in dataset), None)
+            matched = next((p for p in parent_domains(d) if p in domain_dataset), None)
             if matched:
-                hits.append((d, matched))
-            else:
-                misses.append(d)
-        else:
-            misses.append(d)
+                dom_hits.append((d, matched))
+
+    # cruzamento de IPs
+    ip_hits = sorted(ip for ip in in_ips if ip in ip_dataset)
 
     if not args.quiet:
-        print(f"Dataset:  {dataset_path}  ({len(dataset)} domínios únicos)")
-        print(f"Entrada:  {args.input}  ({len(targets)} únicos / {target_lines} linhas)")
-        print(f"Modo subdomínio: {'on' if args.subdomains else 'off'}")
-        print("-" * 60)
+        print(f"Dataset domínios: {domain_dataset_path or '(ausente)'}  ({len(domain_dataset)} únicos)")
+        print(f"Dataset IPs:      {ip_dataset_path or '(ausente)'}  ({len(ip_dataset)} únicos)")
+        print(f"Entrada:          {args.input}  ({len(in_domains)} domínios + {len(in_ips)} IPs / {in_lines} linhas)")
+        print(f"Modo subdomínio:  {'on' if args.subdomains else 'off'}")
+        print("-" * 64)
 
-    if hits:
-        print(f"[!] {len(hits)} HIT(s) encontrados no dataset:")
-        for queried, matched in hits:
-            if queried == matched:
-                print(f"    {queried}")
-            else:
-                print(f"    {queried}  (via {matched})")
-    else:
-        print("[ok] Nenhum domínio da entrada está no dataset.")
+    total_hits = len(dom_hits) + len(ip_hits)
 
-    if not args.quiet and misses:
-        print(f"\n[-] {len(misses)} sem correspondência.")
+    if dom_hits:
+        print(f"[!] {len(dom_hits)} domínio(s) no dataset:")
+        for queried, matched in dom_hits:
+            print(f"    {queried}" if queried == matched else f"    {queried}  (via {matched})")
+    if ip_hits:
+        print(f"[!] {len(ip_hits)} IP(s) no dataset:")
+        for ip in ip_hits:
+            print(f"    {ip}")
+    if total_hits == 0:
+        print("[ok] Nenhuma entrada está nos datasets.")
+
+    if not args.quiet:
+        miss_dom = len(in_domains) - len(dom_hits)
+        miss_ip = len(in_ips) - len(ip_hits)
+        if miss_dom or miss_ip:
+            print(f"\n[-] Sem correspondência: {miss_dom} domínio(s), {miss_ip} IP(s).")
 
     if args.json:
         payload = {
-            "dataset": dataset_path,
-            "dataset_count": len(dataset),
+            "domain_dataset": domain_dataset_path,
+            "domain_dataset_count": len(domain_dataset),
+            "ip_dataset": ip_dataset_path,
+            "ip_dataset_count": len(ip_dataset),
             "input": args.input,
-            "input_count": len(targets),
+            "input_domains": len(in_domains),
+            "input_ips": len(in_ips),
             "subdomain_match": args.subdomains,
-            "hits": [{"queried": q, "matched": m} for q, m in hits],
-            "misses": misses,
+            "domain_hits": [{"queried": q, "matched": m} for q, m in dom_hits],
+            "ip_hits": ip_hits,
         }
         with open(args.json, "w", encoding="utf-8") as fh:
             json.dump(payload, fh, indent=2, ensure_ascii=False)
         if not args.quiet:
             print(f"\nJSON gravado em {args.json}")
 
-    return 1 if hits else 0
+    return 1 if total_hits else 0
 
 
 if __name__ == "__main__":
