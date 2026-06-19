@@ -120,10 +120,25 @@ def find_default(name: str) -> str | None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Cruza domínios/IPs com os datasets FortiBleed.")
-    ap.add_argument("input", help="Arquivo com domínios e/ou IPs a verificar (um por linha).")
-    ap.add_argument("--domains", default=None, help="Dataset de domínios (default: fortibleed-public-dataset.txt).")
-    ap.add_argument("--ips", default=None, help="Dataset de IPs (default: fortibleed-ips.txt).")
+    ap = argparse.ArgumentParser(
+        description="Cruza a SUA lista de domínios/IPs contra os datasets FortiBleed.",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=(
+            "exemplos:\n"
+            "  python3 fortibleed_lookup.py alvos-exemplo.txt\n"
+            "  python3 fortibleed_lookup.py meus_alvos.txt --subdomains\n"
+            "  python3 fortibleed_lookup.py meus_alvos.txt -q --json saida.json\n\n"
+            "o ARQUIVO posicional é a SUA lista (um domínio ou IP por linha).\n"
+            "os datasets do FortiBleed são detectados automaticamente ao lado do\n"
+            "script; só use --domains-db / --ips-db se eles estiverem em outro lugar."
+        ),
+    )
+    ap.add_argument("input", metavar="ARQUIVO",
+                    help="Sua lista de domínios e/ou IPs a verificar (um por linha).")
+    ap.add_argument("--domains-db", dest="domains_db", default=None, metavar="PATH",
+                    help="Caminho do dataset de domínios (default: fortibleed-public-dataset.txt ao lado do script).")
+    ap.add_argument("--ips-db", dest="ips_db", default=None, metavar="PATH",
+                    help="Caminho do dataset de IPs (default: fortibleed-ips.txt ao lado do script).")
     ap.add_argument("--subdomains", action="store_true",
                     help="Conta HIT se um domínio-pai estiver no dataset (vpn.acme.com casa acme.com).")
     ap.add_argument("--json", metavar="ARQUIVO", help="Grava o resultado completo em JSON.")
@@ -136,8 +151,8 @@ def main() -> int:
 
     in_ips, in_domains, in_lines = classify_input(args.input)
 
-    domain_dataset_path = args.domains or find_default("fortibleed-public-dataset.txt")
-    ip_dataset_path = args.ips or find_default("fortibleed-ips.txt")
+    domain_dataset_path = args.domains_db or find_default("fortibleed-public-dataset.txt")
+    ip_dataset_path = args.ips_db or find_default("fortibleed-ips.txt")
 
     domain_dataset = load_domains(domain_dataset_path) if domain_dataset_path else set()
     ip_dataset = load_ips(ip_dataset_path) if ip_dataset_path else set()

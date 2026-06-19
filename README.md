@@ -26,9 +26,13 @@ python3 fortibleed_lookup.py meus_alvos.txt --subdomains
 # só os HITs, e grava o resultado em JSON
 python3 fortibleed_lookup.py meus_alvos.txt -q --json resultado.json
 
-# apontar datasets em outro caminho
-python3 fortibleed_lookup.py meus_alvos.txt --domains dom.txt --ips ips.txt
+# apontar os datasets do FortiBleed em outro caminho (normalmente não precisa)
+python3 fortibleed_lookup.py meus_alvos.txt --domains-db dom.txt --ips-db ips.txt
 ```
+
+`meus_alvos.txt` é a **sua** lista — o argumento posicional, sem flag. As flags
+`--domains-db` / `--ips-db` só servem pra apontar os datasets do FortiBleed
+quando eles não estão ao lado do script (são detectados automaticamente).
 
 A entrada é uma entrada por linha, misturando domínios e IPs livremente. Cada
 linha é classificada automaticamente como IP ou domínio e comparada contra o
