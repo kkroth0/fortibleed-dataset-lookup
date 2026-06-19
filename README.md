@@ -55,7 +55,7 @@ dataset correspondente. Linhas em branco e começadas com `#` são ignoradas.
 - Em modo `--subdomains`, mostra também via qual domínio-pai casou (`vpn.012.net (via 012.net)`).
 - **Exit code** `1` quando há pelo menos um HIT, `0` quando a lista está limpa — encadeável em pipelines de CI/scripts.
 
-## Como o casamento funciona
+## Como o cruzamento funciona
 
 Domínios e IPs são normalizados dos dois lados antes de comparar.
 
